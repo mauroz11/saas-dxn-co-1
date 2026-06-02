@@ -2635,7 +2635,7 @@
     <div class="saas-auth-shell">
       <aside class="saas-auth-brand">
         <div>
-          <img class="saas-auth-logo" src="/assets/brand/logo-dxn.png" alt="DXN">
+          <img class="saas-auth-logo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="DXN">
           <h2>DXN Digital SaaS</h2>
           <p id="saasAuthIntro">Acceso privado multi-tenant para organizaciones y usuarios aprobados.</p>
         </div>
@@ -2670,7 +2670,7 @@
             <label>Correo electronico
               <input name="email" type="email" autocomplete="email" required>
             </label>
-            <label>Codigo DXN / Clave de Acceso
+            <label>Codigo DXN
               <input name="dxnCode" autocomplete="off" required>
             </label>
             <label>Equipo u organizacion a la que perteneces
@@ -2687,7 +2687,7 @@
   <header>
     <div class="topbar">
       <div class="brand">
-        <img class="mark" src="/assets/brand/logo-dxn.png" alt="DXN">
+        <img class="mark" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="DXN">
         <div>
           <h1>DXN Colombia</h1>
           <div class="status">Gestiona afiliaciones y pedidos DXN desde cualquier dispositivo.</div>
@@ -2727,7 +2727,7 @@
   <main id="homeDoc" class="doc-page active">
     <div class="home-minimal">
       <header class="home-center">
-        <img class="home-logo" src="/assets/brand/logo-dxn.png" alt="DXN">
+        <img class="home-logo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="DXN">
         <h2 class="home-title">DXN Colombia</h2>
         <p class="home-subtitle">Gestiona afiliaciones y pedidos DXN desde cualquier dispositivo.</p>
       </header>
@@ -4052,15 +4052,6 @@
         </div>
       </section>
       <section class="saas-admin-card">
-        <h3>Organizaciones</h3>
-        <div class="saas-table-wrap">
-          <table class="saas-table">
-            <thead><tr><th>Nombre</th><th>Estado</th><th>Plan</th><th>Usuarios</th><th>Branding</th><th>Acciones</th></tr></thead>
-            <tbody id="saasOrganizationRows"></tbody>
-          </table>
-        </div>
-      </section>
-      <section class="saas-admin-card">
         <h3>Agregar usuario</h3>
         <form id="saasAdminUserForm" class="saas-auth-form">
           <div class="saas-premium-grid">
@@ -4136,7 +4127,7 @@
             <input name="primaryColor" type="color" value="#1e40af">
           </label>
           <label>URL del logo
-            <input name="logo" placeholder="/assets/brand/logo-dxn.png">
+            <input name="logo" placeholder="assets/brand/logo-dxn.webp">
           </label>
           <label>WhatsApp
             <input name="whatsapp" inputmode="tel" placeholder="573202381273">
@@ -7709,8 +7700,8 @@
       const LOCK_KEY = 'dxn_saas_lock_v1';
       const SUPER_KEY = 'SUPER-DXN-2026';
       const DEMO_KEY = 'DXN-DEMO-2026';
-      const DEFAULT_LOGO = '/assets/brand/logo-dxn.png';
-      const FALLBACK_LOGO = '/assets/brand/logo-dxn.webp';
+      const DEFAULT_LOGO = mappedImage('logo-dxn.webp', 'assets/brand/logo-dxn.webp');
+      const FALLBACK_LOGO = 'assets/brand/logo-dxn.png';
       const INLINE_LOGO = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 240 120%22%3E%3Crect width=%22240%22 height=%22120%22 rx=%2218%22 fill=%22white%22/%3E%3Ctext x=%2250%25%22 y=%2258%25%22 text-anchor=%22middle%22 font-family=%22Arial,sans-serif%22 font-size=%2252%22 font-weight=%22800%22 fill=%22%231e40af%22%3EDXN%3C/text%3E%3C/svg%3E';
 
       const defaultSettings = {
@@ -7743,7 +7734,7 @@
       }
 
       function normalizeLogo(value) {
-        if (!value || value.includes('i0.wp.com') || value === 'assets/brand/logo-dxn.png' || value.endsWith('logo-dxn.webp')) return DEFAULT_LOGO;
+        if (!value || value.includes('i0.wp.com') || value === '/assets/brand/logo-dxn.png' || value === 'assets/brand/logo-dxn.png' || value.endsWith('logo-dxn.webp')) return DEFAULT_LOGO;
         return value;
       }
 
@@ -8062,8 +8053,8 @@
       function applyBranding() {
         const settings = settingsForContext();
         document.documentElement.style.setProperty('--accent', settings.primaryColor || defaultSettings.primaryColor);
-        document.querySelectorAll('.mark, .home-logo').forEach(img => {
-          if (settings.logo && !img.dataset.logoFallbackTried) img.src = settings.logo;
+        document.querySelectorAll('.mark, .home-logo, .saas-auth-logo').forEach(img => {
+          if (settings.logo && img.dataset.fallbackApplied !== 'true' && img.dataset.logoInlineApplied !== 'true' && !img.dataset.logoFallbackTried) img.src = settings.logo;
         });
         document.querySelectorAll('h1').forEach(title => {
           if (title.textContent.includes('DXN')) title.textContent = settings.commercialName || defaultSettings.commercialName;
@@ -8081,12 +8072,14 @@
       function setupLogoFallbacks() {
         document.querySelectorAll('.mark, .home-logo, .saas-auth-logo').forEach(img => {
           img.addEventListener('error', () => {
-            if (!img.dataset.logoFallbackTried) {
-              img.dataset.logoFallbackTried = 'webp';
+            if (img.dataset.logoInlineApplied === 'true') return;
+            if (img.dataset.fallbackApplied !== 'true' && !img.dataset.logoFallbackTried) {
+              img.dataset.logoFallbackTried = 'png';
               img.src = FALLBACK_LOGO;
               return;
             }
             img.classList.add('logo-failed');
+            img.dataset.logoInlineApplied = 'true';
             img.src = INLINE_LOGO;
             img.alt = 'DXN';
           });
@@ -8199,24 +8192,6 @@
             </td>
           </tr>`).join('') : renderEmpty('No hay solicitudes pendientes.');
 
-        document.getElementById('saasOrganizationRows').innerHTML = orgs.length ? orgs.map(org => {
-          const orgUsers = users.filter(user => user.organizationId === org.id);
-          return `
-            <tr>
-              <td>${org.name}</td>
-              <td>${badge(org.status)}</td>
-              <td>${planLabel(org.plan)}</td>
-              <td>${orgUsers.length}</td>
-              <td>${org.settings?.commercialName || org.name}<br><code>${org.settings?.whatsapp || '-'}</code></td>
-              <td class="saas-row-actions">
-                <button type="button" data-saas-action="org-active" data-org-id="${org.id}">Activar</button>
-                <button type="button" class="secondary" data-saas-action="org-suspend" data-org-id="${org.id}">Suspender</button>
-                <button type="button" class="secondary" data-saas-action="plan" data-org-id="${org.id}">Cambiar plan</button>
-                <button type="button" class="danger" data-saas-action="org-delete" data-org-id="${org.id}">Eliminar</button>
-              </td>
-            </tr>`;
-        }).join('') : renderEmpty('No hay organizaciones.');
-
         document.getElementById('saasUserRows').innerHTML = users.length ? users.map(user => {
           const org = orgById(state, user.organizationId);
           return `
@@ -8265,16 +8240,6 @@
           if (action === 'approve' && user && org) { user.status = 'active'; org.status = 'active'; }
           if (action === 'reject' && user && org) { user.status = 'rejected'; org.status = 'rejected'; }
           if (action === 'premium' && org) org.plan = 'premium';
-          if (action === 'org-active' && org) org.status = 'active';
-          if (action === 'org-suspend' && org) org.status = 'suspended';
-          if (action === 'plan' && org) {
-            const plan = prompt('Plan: standard, premium o enterprise', org.plan);
-            if (['standard', 'premium', 'enterprise'].includes(plan)) org.plan = plan;
-          }
-          if (action === 'org-delete' && org && confirm('Eliminar organizacion y usuarios asociados?')) {
-            state.organizations = state.organizations.filter(item => item.id !== org.id);
-            state.users = state.users.filter(item => item.organizationId !== org.id);
-          }
           if (action === 'user-active' && user) user.status = 'active';
           if (action === 'user-suspend' && user) user.status = 'suspended';
           if (action === 'role' && user) {
