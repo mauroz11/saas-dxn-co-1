@@ -12,6 +12,8 @@ La version actual incluye una capa SaaS multi-tenant estatica para prototipo:
 El Super Admin entra por el enlace reservado `dxn-svc-7f29c4.html`.
 Los usuarios entran por `index.html`.
 Los registros nuevos quedan pendientes y se aprueban desde el panel `Super Admin`.
+En el registro no se solicita contrasena: el Codigo DXN registrado queda como
+Clave de Acceso una vez el usuario sea aprobado.
 Los datos del prototipo se guardan en `localStorage`; para produccion se debe migrar
 a una base de datos segura con RLS, por ejemplo usando el esquema de
 `docs/saas-multitenant-supabase.sql`.

@@ -88,6 +88,13 @@
       box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
     }
 
+    .mark.logo-failed,
+    .home-logo.logo-failed,
+    .saas-auth-logo.logo-failed {
+      object-fit: contain;
+      background: #fff;
+    }
+
     h1 {
       margin: 0;
       font-size: 20px;
@@ -2105,6 +2112,10 @@
       padding-top: 16px;
     }
 
+    body[data-active-doc="superAdminDoc"] footer {
+      display: none;
+    }
+
     /* Estilos del Buscador y Categorias */
     .search-wrapper {
       position: relative;
@@ -2624,7 +2635,7 @@
     <div class="saas-auth-shell">
       <aside class="saas-auth-brand">
         <div>
-          <img class="saas-auth-logo" src="assets/brand/logo-dxn.png" alt="DXN">
+          <img class="saas-auth-logo" src="/assets/brand/logo-dxn.png" alt="DXN">
           <h2>DXN Digital SaaS</h2>
           <p id="saasAuthIntro">Acceso privado multi-tenant para organizaciones y usuarios aprobados.</p>
         </div>
@@ -2659,13 +2670,10 @@
             <label>Correo electronico
               <input name="email" type="email" autocomplete="email" required>
             </label>
-            <label>Codigo DXN
+            <label>Codigo DXN / Clave de Acceso
               <input name="dxnCode" autocomplete="off" required>
             </label>
-            <label>Contrasena
-              <input name="password" type="password" autocomplete="new-password" required>
-            </label>
-            <label>Nombre de organizacion
+            <label>Equipo u organizacion a la que perteneces
               <input name="organizationName" required>
             </label>
             <button type="submit">Enviar solicitud</button>
@@ -2679,7 +2687,7 @@
   <header>
     <div class="topbar">
       <div class="brand">
-        <img class="mark" src="assets/brand/logo-dxn.png" alt="DXN">
+        <img class="mark" src="/assets/brand/logo-dxn.png" alt="DXN">
         <div>
           <h1>DXN Colombia</h1>
           <div class="status">Gestiona afiliaciones y pedidos DXN desde cualquier dispositivo.</div>
@@ -2719,7 +2727,7 @@
   <main id="homeDoc" class="doc-page active">
     <div class="home-minimal">
       <header class="home-center">
-        <img class="home-logo" src="assets/brand/logo-dxn.png" alt="DXN">
+        <img class="home-logo" src="/assets/brand/logo-dxn.png" alt="DXN">
         <h2 class="home-title">DXN Colombia</h2>
         <p class="home-subtitle">Gestiona afiliaciones y pedidos DXN desde cualquier dispositivo.</p>
       </header>
@@ -4128,7 +4136,7 @@
             <input name="primaryColor" type="color" value="#1e40af">
           </label>
           <label>URL del logo
-            <input name="logo" placeholder="assets/brand/logo-dxn.png">
+            <input name="logo" placeholder="/assets/brand/logo-dxn.png">
           </label>
           <label>WhatsApp
             <input name="whatsapp" inputmode="tel" placeholder="573202381273">
@@ -7701,7 +7709,9 @@
       const LOCK_KEY = 'dxn_saas_lock_v1';
       const SUPER_KEY = 'SUPER-DXN-2026';
       const DEMO_KEY = 'DXN-DEMO-2026';
-      const DEFAULT_LOGO = 'assets/brand/logo-dxn.png';
+      const DEFAULT_LOGO = '/assets/brand/logo-dxn.png';
+      const FALLBACK_LOGO = '/assets/brand/logo-dxn.webp';
+      const INLINE_LOGO = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 240 120%22%3E%3Crect width=%22240%22 height=%22120%22 rx=%2218%22 fill=%22white%22/%3E%3Ctext x=%2250%25%22 y=%2258%25%22 text-anchor=%22middle%22 font-family=%22Arial,sans-serif%22 font-size=%2252%22 font-weight=%22800%22 fill=%22%231e40af%22%3EDXN%3C/text%3E%3C/svg%3E';
 
       const defaultSettings = {
         commercialName: 'DXN Colombia',
@@ -7733,7 +7743,7 @@
       }
 
       function normalizeLogo(value) {
-        if (!value || value.includes('i0.wp.com') || value.endsWith('logo-dxn.webp')) return DEFAULT_LOGO;
+        if (!value || value.includes('i0.wp.com') || value === 'assets/brand/logo-dxn.png' || value.endsWith('logo-dxn.webp')) return DEFAULT_LOGO;
         return value;
       }
 
@@ -7933,18 +7943,13 @@
         return btoa(unescape(encodeURIComponent(`local:${value}:dxn`)));
       }
 
-      function validPassword(value) {
-        return /[A-Z]/.test(value) && /[a-z]/.test(value) && /\d/.test(value) && value.length >= 8;
-      }
-
       function register(formData) {
         const state = loadState();
         const email = (formData.get('email') || '').trim().toLowerCase();
         const dxnCode = normalizeKey(formData.get('dxnCode'));
-        const password = formData.get('password') || '';
         if (state.users.some(user => user.email.toLowerCase() === email)) return { ok: false, message: 'El correo ya esta registrado.' };
         if (state.users.some(user => normalizeKey(user.dxnCode) === dxnCode || normalizeKey(user.accessKey) === dxnCode)) return { ok: false, message: 'El codigo DXN ya esta registrado.' };
-        if (!validPassword(password)) return { ok: false, message: 'La contrasena debe tener 8 caracteres, mayuscula, minuscula y numero.' };
+        if (!dxnCode) return { ok: false, message: 'Ingresa tu Codigo DXN.' };
 
         const orgId = uid('org');
         const userId = uid('usr');
@@ -7963,7 +7968,7 @@
           email,
           dxnCode,
           accessKey: dxnCode,
-          passwordHash: hashPassword(password),
+          passwordHash: hashPassword(dxnCode),
           role: 'standard',
           permissions: ['orders', 'contracts'],
           status: 'pending',
@@ -8058,7 +8063,7 @@
         const settings = settingsForContext();
         document.documentElement.style.setProperty('--accent', settings.primaryColor || defaultSettings.primaryColor);
         document.querySelectorAll('.mark, .home-logo').forEach(img => {
-          if (settings.logo) img.src = settings.logo;
+          if (settings.logo && !img.dataset.logoFallbackTried) img.src = settings.logo;
         });
         document.querySelectorAll('h1').forEach(title => {
           if (title.textContent.includes('DXN')) title.textContent = settings.commercialName || defaultSettings.commercialName;
@@ -8071,6 +8076,21 @@
           whatsapp.href = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(settings.whatsappMessage || '')}` : '#';
           whatsapp.hidden = !phone;
         }
+      }
+
+      function setupLogoFallbacks() {
+        document.querySelectorAll('.mark, .home-logo, .saas-auth-logo').forEach(img => {
+          img.addEventListener('error', () => {
+            if (!img.dataset.logoFallbackTried) {
+              img.dataset.logoFallbackTried = 'webp';
+              img.src = FALLBACK_LOGO;
+              return;
+            }
+            img.classList.add('logo-failed');
+            img.src = INLINE_LOGO;
+            img.alt = 'DXN';
+          });
+        });
       }
 
       function applyAuthMode() {
@@ -8370,6 +8390,7 @@
 
       function init() {
         loadState();
+        setupLogoFallbacks();
         bind();
         applyAccessState();
         window.setInterval(applyAccessState, 5000);
