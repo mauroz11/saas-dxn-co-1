@@ -2316,8 +2316,7 @@
     body.saas-locked > .menu-backdrop,
     body.saas-locked > .document-menu,
     body.saas-locked > main,
-    body.saas-locked > .mobile-tab-bar,
-    body.saas-locked > .saas-whatsapp {
+    body.saas-locked > .mobile-tab-bar {
       display: none !important;
     }
 
@@ -2584,24 +2583,6 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 14px;
-    }
-
-    .saas-whatsapp {
-      position: fixed;
-      right: 18px;
-      bottom: 88px;
-      z-index: 800;
-      width: 56px;
-      height: 56px;
-      display: grid;
-      place-items: center;
-      border-radius: 50%;
-      background: #25d366;
-      color: #fff;
-      box-shadow: 0 16px 32px rgba(37, 211, 102, 0.35);
-      text-decoration: none;
-      font-weight: 900;
-      font-size: 22px;
     }
 
     .saas-admin-only,
@@ -3258,7 +3239,6 @@
 
         <div class="panel active order-panel" id="orderProductos">
           <h2>Productos</h2>
-          <div class="notice" id="kitNotice"><strong>Ya soy socio DXN o estoy haciendo mi afiliacion.</strong> Selecciona los productos y cantidades que deseas comprar; luego completa tus datos para generar la orden de compra.</div>
           
           <div class="search-wrapper">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="search-icon">
@@ -4153,8 +4133,6 @@
       </form>
     </section>
   </main>
-
-  <a class="saas-whatsapp" id="saasWhatsapp" href="#" target="_blank" rel="noopener" aria-label="WhatsApp">W</a>
 
   <!-- Barra de navegacion inferior para dispositivos moviles -->
   <nav class="mobile-tab-bar" aria-label="Navegacion movil">
@@ -6240,7 +6218,6 @@
     function setProductsOnlyMode() {
       document.getElementsByName('orderKit')[0].value = '';
       document.getElementsByName('orderMode')[0].value = 'productsOnly';
-      document.getElementById('kitNotice').innerHTML = '<strong>Ya soy socio DXN o estoy haciendo mi afiliacion.</strong> Selecciona los productos y cantidades que deseas comprar; luego completa tus datos para generar la orden de compra.';
       updateOrderTotals();
       setOrderTab('orderProductos');
     }
@@ -6469,7 +6446,7 @@
       document.getElementById('currentStepLabel').textContent = `Orden de compra`;
       document.getElementById('bar').style.width = `${documentProgress('orderDoc')}%`;
       if (id === 'orderResumen') renderOrderResumen();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: id === 'orderProductos' ? 'auto' : 'smooth' });
     }
 
     function orderProblems(section) {
@@ -8061,12 +8038,6 @@
         });
         const homeTitle = document.querySelector('#homeDoc .home-title');
         if (homeTitle) homeTitle.textContent = settings.commercialName || defaultSettings.commercialName;
-        const whatsapp = document.getElementById('saasWhatsapp');
-        if (whatsapp) {
-          const phone = (settings.whatsapp || '').replace(/\D/g, '');
-          whatsapp.href = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(settings.whatsappMessage || '')}` : '#';
-          whatsapp.hidden = !phone;
-        }
       }
 
       function setupLogoFallbacks() {
