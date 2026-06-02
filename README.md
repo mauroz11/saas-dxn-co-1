@@ -9,6 +9,8 @@ La version actual incluye una capa SaaS multi-tenant estatica para prototipo:
 - Super Admin: `SUPER-DXN-2026`
 - Usuario demo activo: `DXN-DEMO-2026`
 
+El Super Admin entra por `admin.html` o por `index.html#super-admin`.
+Los usuarios entran por `index.html`.
 Los registros nuevos quedan pendientes y se aprueban desde el panel `Super Admin`.
 Los datos del prototipo se guardan en `localStorage`; para produccion se debe migrar
 a una base de datos segura con RLS, por ejemplo usando el esquema de
@@ -17,6 +19,7 @@ a una base de datos segura con RLS, por ejemplo usando el esquema de
 Sube a GitHub todo el contenido de esta carpeta, incluyendo:
 
 - `index.html`
+- `admin.html`
 - `assets`
 - todos los archivos `.pdf`, `.png`, `.txt` y `.js` que estan junto al `index.html`
 

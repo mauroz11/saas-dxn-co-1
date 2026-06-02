@@ -2624,14 +2624,13 @@
     <div class="saas-auth-shell">
       <aside class="saas-auth-brand">
         <div>
-          <img class="saas-auth-logo" src="assets/brand/logo-dxn.webp" alt="DXN">
+          <img class="saas-auth-logo" src="assets/brand/logo-dxn.png" alt="DXN">
           <h2>DXN Digital SaaS</h2>
-          <p>Acceso privado multi-tenant para organizaciones, usuarios aprobados y administracion central.</p>
+          <p id="saasAuthIntro">Acceso privado multi-tenant para organizaciones y usuarios aprobados.</p>
         </div>
-        <div class="notice">
-          <strong>Claves iniciales</strong><br>
-          Super Admin: <code>SUPER-DXN-2026</code><br>
-          Usuario demo activo: <code>DXN-DEMO-2026</code>
+        <div class="notice" id="saasAccessNotice">
+          <strong>Acceso de usuario</strong><br>
+          Ingresa unicamente con tu Clave de Acceso aprobada.
         </div>
       </aside>
       <section class="saas-auth-panel" aria-label="Acceso SaaS">
@@ -2640,7 +2639,7 @@
           <button type="button" id="saasRegisterTab" aria-selected="false">Registro</button>
         </div>
         <div class="saas-auth-view" id="saasLoginView">
-          <h2>Clave de Acceso</h2>
+          <h2 id="saasLoginTitle">Clave de Acceso</h2>
           <p>Ingresa la clave aprobada para abrir la plataforma.</p>
           <form class="saas-auth-form" id="saasLoginForm">
             <label>Clave de Acceso
@@ -2680,7 +2679,7 @@
   <header>
     <div class="topbar">
       <div class="brand">
-        <img class="mark" src="https://i0.wp.com/dxncolombia.dxndigital.com/wp-content/uploads/2026/05/logo-dxn.webp?ssl=1" alt="DXN">
+        <img class="mark" src="assets/brand/logo-dxn.png" alt="DXN">
         <div>
           <h1>DXN Colombia</h1>
           <div class="status">Gestiona afiliaciones y pedidos DXN desde cualquier dispositivo.</div>
@@ -2720,7 +2719,7 @@
   <main id="homeDoc" class="doc-page active">
     <div class="home-minimal">
       <header class="home-center">
-        <img class="home-logo" src="https://i0.wp.com/dxncolombia.dxndigital.com/wp-content/uploads/2026/05/logo-dxn.webp?ssl=1" alt="DXN">
+        <img class="home-logo" src="assets/brand/logo-dxn.png" alt="DXN">
         <h2 class="home-title">DXN Colombia</h2>
         <p class="home-subtitle">Gestiona afiliaciones y pedidos DXN desde cualquier dispositivo.</p>
       </header>
@@ -4129,7 +4128,7 @@
             <input name="primaryColor" type="color" value="#1e40af">
           </label>
           <label>URL del logo
-            <input name="logo" placeholder="assets/brand/logo-dxn.webp">
+            <input name="logo" placeholder="assets/brand/logo-dxn.png">
           </label>
           <label>WhatsApp
             <input name="whatsapp" inputmode="tel" placeholder="573202381273">
@@ -7702,10 +7701,11 @@
       const LOCK_KEY = 'dxn_saas_lock_v1';
       const SUPER_KEY = 'SUPER-DXN-2026';
       const DEMO_KEY = 'DXN-DEMO-2026';
+      const DEFAULT_LOGO = 'assets/brand/logo-dxn.png';
 
       const defaultSettings = {
         commercialName: 'DXN Colombia',
-        logo: 'assets/brand/logo-dxn.webp',
+        logo: DEFAULT_LOGO,
         primaryColor: '#1e40af',
         whatsapp: '573202381273',
         whatsappMessage: 'Hola, deseo recibir informacion.',
@@ -7725,6 +7725,16 @@
 
       function normalizeKey(value) {
         return (value || '').trim().toUpperCase();
+      }
+
+      function isAdminAccessPath() {
+        const query = new URLSearchParams(window.location.search);
+        return window.location.hash === '#super-admin' || query.get('admin') === '1';
+      }
+
+      function normalizeLogo(value) {
+        if (!value || value.includes('i0.wp.com') || value.endsWith('logo-dxn.webp')) return DEFAULT_LOGO;
+        return value;
       }
 
       function seedState() {
@@ -7771,7 +7781,16 @@
       function loadState() {
         try {
           const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-          if (parsed?.organizations && parsed?.users) return parsed;
+          if (parsed?.organizations && parsed?.users) {
+            parsed.superAdmin = parsed.superAdmin || { id: 'super_admin', name: 'Super Administrador', accessKey: SUPER_KEY };
+            parsed.superAdmin.accessKey = parsed.superAdmin.accessKey || SUPER_KEY;
+            parsed.organizations.forEach(org => {
+              org.settings = { ...defaultSettings, ...(org.settings || {}) };
+              org.settings.logo = normalizeLogo(org.settings.logo);
+            });
+            saveState(parsed);
+            return parsed;
+          }
         } catch (error) {
           console.warn('No se pudo leer el estado SaaS', error);
         }
@@ -7877,6 +7896,9 @@
         const key = normalizeKey(accessKey);
         const state = loadState();
         if (key === state.superAdmin.accessKey) {
+          if (!isAdminAccessPath()) {
+            return { ok: false, message: 'Esta clave solo puede usarse desde el acceso administrativo.' };
+          }
           const session = { type: 'super_admin', userId: state.superAdmin.id, name: state.superAdmin.name, role: 'super_admin', createdAt: todayIso() };
           audit(state, session, 'Inicio de sesion Super Admin');
           saveState(state);
@@ -7887,6 +7909,9 @@
 
         const user = state.users.find(item => normalizeKey(item.accessKey || item.dxnCode) === key);
         const org = user ? orgById(state, user.organizationId) : null;
+        if (isAdminAccessPath()) {
+          return { ok: false, message: 'El acceso administrativo es exclusivo para el Super Admin.' };
+        }
         const allowed = user && org && user.status === 'active' && org.status === 'active';
         if (!allowed) {
           const nextAttempts = (lock.attempts || 0) + 1;
@@ -7999,8 +8024,32 @@
         return { state, session, user, org };
       }
 
+      function validateSessionContext(context) {
+        const { state, session, user, org } = context;
+        if (!session) return context;
+        if (session.type === 'super_admin') {
+          if (!isAdminAccessPath()) {
+            clearSession();
+            return { state, session: null, user: null, org: null, deniedMessage: 'Usa el enlace administrativo para ingresar como Super Admin.' };
+          }
+          return context;
+        }
+        if (isAdminAccessPath()) {
+          clearSession();
+          return { state, session: null, user: null, org: null, deniedMessage: 'El acceso administrativo es exclusivo para el Super Admin.' };
+        }
+        if (!user || !org || user.status !== 'active' || org.status !== 'active') {
+          const deniedMessage = denyMessage(user, org);
+          audit(state, session, `Sesion cerrada automaticamente: ${deniedMessage}`);
+          saveState(state);
+          clearSession();
+          return { state, session: null, user: null, org: null, deniedMessage };
+        }
+        return context;
+      }
+
       function settingsForContext() {
-        const { session, org } = currentContext();
+        const { session, org } = validateSessionContext(currentContext());
         if (session?.type === 'super_admin') return defaultSettings;
         return { ...defaultSettings, ...(org?.settings || {}) };
       }
@@ -8024,8 +8073,36 @@
         }
       }
 
+      function applyAuthMode() {
+        const adminMode = isAdminAccessPath();
+        const loginTitle = document.getElementById('saasLoginTitle');
+        const authIntro = document.getElementById('saasAuthIntro');
+        const notice = document.getElementById('saasAccessNotice');
+        const loginTab = document.getElementById('saasLoginTab');
+        const registerTab = document.getElementById('saasRegisterTab');
+        const registerView = document.getElementById('saasRegisterView');
+        const loginView = document.getElementById('saasLoginView');
+        if (loginTitle) loginTitle.textContent = adminMode ? 'Acceso Super Admin' : 'Clave de Acceso';
+        if (authIntro) authIntro.textContent = adminMode
+          ? 'Area administrativa independiente conectada a la plataforma SaaS.'
+          : 'Acceso privado multi-tenant para organizaciones y usuarios aprobados.';
+        if (notice) {
+          notice.innerHTML = adminMode
+            ? '<strong>Acceso administrativo</strong><br>Ruta exclusiva del Super Admin. Los usuarios ingresan por el acceso principal.'
+            : '<strong>Acceso de usuario</strong><br>Ingresa unicamente con tu Clave de Acceso aprobada.';
+        }
+        if (registerTab) registerTab.hidden = adminMode;
+        if (loginTab) loginTab.textContent = adminMode ? 'Super Admin' : 'Acceso';
+        if (adminMode && registerView && loginView) {
+          registerView.hidden = true;
+          loginView.hidden = false;
+          loginTab?.setAttribute('aria-selected', 'true');
+        }
+      }
+
       function applyAccessState() {
-        const { session, user, org } = currentContext();
+        const { session, user, org, deniedMessage } = validateSessionContext(currentContext());
+        applyAuthMode();
         const locked = !session;
         document.body.classList.toggle('saas-locked', locked);
         document.body.classList.toggle('saas-super-admin', session?.type === 'super_admin');
@@ -8035,6 +8112,11 @@
         const sessionBox = document.getElementById('saasSession');
         if (sessionBox) sessionBox.hidden = locked;
         if (label && session) label.textContent = session.type === 'super_admin' ? 'Super Admin' : `${session.name} - ${org?.name || ''}`;
+        const loginMessage = document.getElementById('saasLoginMessage');
+        if (locked && deniedMessage && loginMessage) {
+          loginMessage.textContent = deniedMessage;
+          loginMessage.classList.remove('success');
+        }
         applyBranding();
         renderAdmin();
         renderPremiumForm();
@@ -8224,6 +8306,7 @@
         const loginView = document.getElementById('saasLoginView');
         const registerView = document.getElementById('saasRegisterView');
         function setAuthView(view) {
+          if (isAdminAccessPath() && view !== 'login') view = 'login';
           const isLogin = view === 'login';
           loginTab?.setAttribute('aria-selected', isLogin ? 'true' : 'false');
           registerTab?.setAttribute('aria-selected', isLogin ? 'false' : 'true');
@@ -8279,12 +8362,17 @@
           message.textContent = 'Configuracion guardada.';
           message.classList.add('success');
         });
+        window.addEventListener('storage', event => {
+          if (event.key === STORAGE_KEY || event.key === SESSION_KEY) applyAccessState();
+        });
+        window.addEventListener('hashchange', applyAccessState);
       }
 
       function init() {
         loadState();
         bind();
         applyAccessState();
+        window.setInterval(applyAccessState, 5000);
       }
 
       return { init, getSponsorSettings, applyAccessState, loadState };
