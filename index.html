@@ -7,6 +7,8 @@
   <script src="pdf-lib.min.js"></script>
   <script src="templates-extra.js"></script>
   <script src="assets/product-image-map.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/supabase-config.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
 
@@ -2617,8 +2619,8 @@
       <aside class="saas-auth-brand">
         <div>
           <img class="saas-auth-logo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="DXN">
-          <h2>DXN Digital SaaS</h2>
-          <p id="saasAuthIntro">Acceso privado multi-tenant para organizaciones y usuarios aprobados.</p>
+          <h2>DXN Digital</h2>
+          <p id="saasAuthIntro">Herramienta privada y exclusiva para potenciar el desarrollo y crecimiento del equipo y toda su red.</p>
         </div>
         <div class="notice" id="saasAccessNotice">
           <strong>Acceso de usuario</strong><br>
@@ -2643,7 +2645,7 @@
         </div>
         <div class="saas-auth-view" id="saasRegisterView" hidden>
           <h2>Solicitud de registro</h2>
-          <p>El acceso queda pendiente hasta que el Super Administrador lo apruebe.</p>
+          <p>El acceso queda pendiente hasta que el Gestor lo autorice.</p>
           <form class="saas-auth-form" id="saasRegisterForm">
             <label>Nombre completo
               <input name="name" autocomplete="name" required>
@@ -2656,6 +2658,9 @@
             </label>
             <label>Equipo u organizacion a la que perteneces
               <input name="organizationName" required>
+            </label>
+            <label>Nombre del patrocinador
+              <input name="sponsorName" autocomplete="off" required>
             </label>
             <button type="submit">Enviar solicitud</button>
             <div class="saas-message" id="saasRegisterMessage"></div>
@@ -4019,7 +4024,6 @@
           <h2>Super Administrador</h2>
           <p>Control global de organizaciones, usuarios, planes, permisos e integraciones.</p>
         </div>
-        <button type="button" id="saasResetDemo" class="secondary">Restaurar datos demo</button>
       </section>
       <div class="saas-stats" id="saasGlobalStats"></div>
       <section class="saas-admin-card">
@@ -4035,9 +4039,6 @@
         <h3>Agregar usuario</h3>
         <form id="saasAdminUserForm" class="saas-auth-form">
           <div class="saas-premium-grid">
-            <label>Organizacion
-              <select name="organizationId" id="saasAdminUserOrganization" required></select>
-            </label>
             <label>Nombre completo
               <input name="name" autocomplete="off" required>
             </label>
@@ -4047,22 +4048,11 @@
             <label>Codigo DXN
               <input name="dxnCode" autocomplete="off" required>
             </label>
-            <label>Clave de Acceso
-              <input name="accessKey" autocomplete="off" placeholder="Se genera si queda vacia">
+            <label>Equipo u organizacion a la que perteneces
+              <input name="organizationName" autocomplete="off" required>
             </label>
-            <label>Rol
-              <select name="role">
-                <option value="standard">Usuario Estandar</option>
-                <option value="premium">Usuario Premium</option>
-                <option value="org_admin">Administrador de Organizacion</option>
-              </select>
-            </label>
-            <label>Estado
-              <select name="status">
-                <option value="active">Activo</option>
-                <option value="pending">Pendiente</option>
-                <option value="suspended">Suspendido</option>
-              </select>
+            <label>Nombre del patrocinador
+              <input name="sponsorName" autocomplete="off" required>
             </label>
           </div>
           <button type="submit">Agregar usuario</button>
@@ -7676,10 +7666,15 @@
       const SESSION_KEY = 'dxn_saas_session_v1';
       const LOCK_KEY = 'dxn_saas_lock_v1';
       const SUPER_KEY = 'SUPER-DXN-2026';
-      const DEMO_KEY = 'DXN-DEMO-2026';
       const DEFAULT_LOGO = mappedImage('logo-dxn.webp', 'assets/brand/logo-dxn.webp');
       const FALLBACK_LOGO = 'assets/brand/logo-dxn.png';
       const INLINE_LOGO = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 240 120%22%3E%3Crect width=%22240%22 height=%22120%22 rx=%2218%22 fill=%22white%22/%3E%3Ctext x=%2250%25%22 y=%2258%25%22 text-anchor=%22middle%22 font-family=%22Arial,sans-serif%22 font-size=%2252%22 font-weight=%22800%22 fill=%22%231e40af%22%3EDXN%3C/text%3E%3C/svg%3E';
+      const supabaseConfig = window.DXN_SUPABASE_CONFIG || {};
+      const supabaseEnabled = Boolean(supabaseConfig.url && supabaseConfig.anonKey && window.supabase?.createClient);
+      const REMOTE_SESSION_KEY = 'dxn_saas_supabase_session_v1';
+      let supabaseClient = null;
+      let remoteStateCache = null;
+      let activeSettingsCache = null;
 
       const defaultSettings = {
         commercialName: 'DXN Colombia',
@@ -7705,6 +7700,107 @@
         return (value || '').trim().toUpperCase();
       }
 
+      function client() {
+        if (!supabaseEnabled) return null;
+        if (!supabaseClient) supabaseClient = window.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey);
+        return supabaseClient;
+      }
+
+      function deviceInfo() {
+        return {
+          browser: navigator.userAgent.slice(0, 180),
+          device: navigator.platform || 'web'
+        };
+      }
+
+      function getRemoteSession() {
+        try {
+          return JSON.parse(sessionStorage.getItem(REMOTE_SESSION_KEY) || 'null');
+        } catch {
+          return null;
+        }
+      }
+
+      function saveRemoteSession(session) {
+        sessionStorage.setItem(REMOTE_SESSION_KEY, JSON.stringify(session));
+      }
+
+      function clearRemoteSession() {
+        sessionStorage.removeItem(REMOTE_SESSION_KEY);
+      }
+
+      function normalizeRemoteState(payload) {
+        const state = payload?.state || payload || {};
+        const normalized = {
+          version: 2,
+          superAdmin: { id: 'super_admin', name: 'Super Administrador', accessKey: 'SUPABASE' },
+          organizations: state.organizations || [],
+          users: state.users || [],
+          auditLogs: state.auditLogs || [],
+          webhooks: [],
+          apiKeys: []
+        };
+        normalized.organizations.forEach(org => {
+          org.createdAt = org.createdAt || org.created_at || todayIso();
+          org.settings = { ...defaultSettings, ...(org.settings || {}) };
+          org.settings.logo = normalizeLogo(org.settings.logo);
+        });
+        normalized.users.forEach(user => {
+          user.organizationId = user.organizationId || user.organization_id;
+          user.name = user.name || user.full_name;
+          user.dxnCode = user.dxnCode || user.dxn_code;
+          user.accessKey = user.accessKey || user.access_key_hint || user.dxnCode || '';
+          user.createdAt = user.createdAt || user.created_at || todayIso();
+        });
+        normalized.auditLogs.forEach(log => {
+          log.userId = log.userId || log.user_id || 'anonymous';
+          log.userName = log.userName || log.user_name || 'Visitante';
+          log.at = log.at || log.created_at || todayIso();
+        });
+        return normalized;
+      }
+
+      async function rpc(name, args = {}) {
+        const api = client();
+        if (!api) return { ok: false, message: 'Supabase no esta configurado.' };
+        const { data, error } = await api.rpc(name, args);
+        if (error) {
+          console.error(`Supabase RPC ${name}`, error);
+          return { ok: false, message: error.message || 'Error de conexion con Supabase.' };
+        }
+        return data || { ok: true };
+      }
+
+      async function remoteContext() {
+        const session = getRemoteSession();
+        if (!session?.token) return { state: remoteStateCache || seedState(), session: null, user: null, org: null };
+        const result = await rpc('dxn_saas_context', {
+          p_session_token: session.token,
+          p_admin_path: isAdminAccessPath()
+        });
+        if (!result.ok) {
+          clearRemoteSession();
+          return { state: remoteStateCache || seedState(), session: null, user: null, org: null, deniedMessage: result.message };
+        }
+        remoteStateCache = normalizeRemoteState(result);
+        if (result.session) saveRemoteSession(result.session);
+        return {
+          state: remoteStateCache,
+          session: result.session || session,
+          user: result.user || null,
+          org: result.org || null,
+          deniedMessage: result.deniedMessage
+        };
+      }
+
+      async function remoteSnapshot() {
+        const session = getRemoteSession();
+        if (!session?.token) return remoteStateCache || seedState();
+        const result = await rpc('dxn_saas_admin_snapshot', { p_session_token: session.token });
+        if (result.ok) remoteStateCache = normalizeRemoteState(result);
+        return remoteStateCache || seedState();
+      }
+
       function isAdminAccessPath() {
         const query = new URLSearchParams(window.location.search);
         return window.location.hash === '#dxn-svc-7f29c4' || query.get('svc') === '7f29c4';
@@ -7716,8 +7812,6 @@
       }
 
       function seedState() {
-        const orgId = 'org_demo_dxn';
-        const userId = 'usr_demo_dxn';
         return {
           version: 1,
           superAdmin: {
@@ -7725,31 +7819,8 @@
             name: 'Super Administrador',
             accessKey: SUPER_KEY
           },
-          organizations: [
-            {
-              id: orgId,
-              name: 'DXN Digital',
-              status: 'active',
-              plan: 'premium',
-              createdAt: todayIso(),
-              settings: { ...defaultSettings }
-            }
-          ],
-          users: [
-            {
-              id: userId,
-              organizationId: orgId,
-              name: 'Usuario Demo',
-              email: 'demo@dxndigital.local',
-              dxnCode: DEMO_KEY,
-              accessKey: DEMO_KEY,
-              passwordHash: 'local-demo-hash',
-              role: 'premium',
-              permissions: ['orders', 'contracts', 'premium_dashboard'],
-              status: 'active',
-              createdAt: todayIso()
-            }
-          ],
+          organizations: [],
+          users: [],
           auditLogs: [],
           webhooks: [],
           apiKeys: []
@@ -7859,12 +7930,24 @@
         if (user.status === 'pending') return 'Tu solicitud aun esta en proceso de validacion.';
         if (user.status === 'suspended') return 'Tu acceso ha sido suspendido. Contacta al administrador.';
         if (user.status === 'rejected') return 'Clave de acceso no encontrada.';
-        if (!org || org.status !== 'active') return 'La organizacion asociada a esta cuenta no se encuentra activa.';
-        if (user.status === 'expired' || org.status === 'expired') return 'La suscripcion asociada a esta cuenta ha expirado.';
+        if (user.status === 'expired') return 'La suscripcion asociada a esta cuenta ha expirado.';
         return 'Acceso denegado.';
       }
 
-      function login(accessKey) {
+      async function login(accessKey) {
+        if (supabaseEnabled) {
+          const result = await rpc('dxn_saas_login', {
+            p_access_key: accessKey,
+            p_admin_path: isAdminAccessPath(),
+            p_browser: deviceInfo().browser,
+            p_device: deviceInfo().device
+          });
+          if (result.ok && result.session) {
+            saveRemoteSession(result.session);
+            remoteStateCache = result.state ? normalizeRemoteState(result) : remoteStateCache;
+          }
+          return result;
+        }
         const lock = getLock();
         if (lock.until && lock.until > Date.now()) {
           const minutes = Math.ceil((lock.until - Date.now()) / 60000);
@@ -7890,7 +7973,7 @@
         if (isAdminAccessPath()) {
           return { ok: false, message: 'El acceso administrativo es exclusivo para el Super Admin.' };
         }
-        const allowed = user && org && user.status === 'active' && org.status === 'active';
+        const allowed = user && user.status === 'active';
         if (!allowed) {
           const nextAttempts = (lock.attempts || 0) + 1;
           setLock({ attempts: nextAttempts, until: nextAttempts >= 5 ? Date.now() + 5 * 60000 : 0 });
@@ -7911,13 +7994,28 @@
         return btoa(unescape(encodeURIComponent(`local:${value}:dxn`)));
       }
 
-      function register(formData) {
+      async function register(formData) {
+        if (supabaseEnabled) {
+          return rpc('dxn_saas_register', {
+            p_payload: {
+              name: (formData.get('name') || '').trim(),
+              email: (formData.get('email') || '').trim().toLowerCase(),
+              dxnCode: normalizeKey(formData.get('dxnCode')),
+              organizationName: (formData.get('organizationName') || '').trim(),
+              sponsorName: (formData.get('sponsorName') || '').trim()
+            },
+            p_browser: deviceInfo().browser,
+            p_device: deviceInfo().device
+          });
+        }
         const state = loadState();
         const email = (formData.get('email') || '').trim().toLowerCase();
         const dxnCode = normalizeKey(formData.get('dxnCode'));
+        const sponsorName = (formData.get('sponsorName') || '').trim();
         if (state.users.some(user => user.email.toLowerCase() === email)) return { ok: false, message: 'El correo ya esta registrado.' };
         if (state.users.some(user => normalizeKey(user.dxnCode) === dxnCode || normalizeKey(user.accessKey) === dxnCode)) return { ok: false, message: 'El codigo DXN ya esta registrado.' };
         if (!dxnCode) return { ok: false, message: 'Ingresa tu Codigo DXN.' };
+        if (!sponsorName) return { ok: false, message: 'Ingresa el nombre del patrocinador.' };
 
         const orgId = uid('org');
         const userId = uid('usr');
@@ -7927,7 +8025,7 @@
           status: 'pending',
           plan: 'standard',
           createdAt: todayIso(),
-          settings: { ...defaultSettings, commercialName: (formData.get('organizationName') || '').trim() || defaultSettings.commercialName }
+          settings: { ...defaultSettings, commercialName: (formData.get('organizationName') || '').trim() || defaultSettings.commercialName, sponsorName }
         });
         state.users.push({
           id: userId,
@@ -7935,6 +8033,7 @@
           name: (formData.get('name') || '').trim(),
           email,
           dxnCode,
+          sponsorName,
           accessKey: dxnCode,
           passwordHash: hashPassword(dxnCode),
           role: 'standard',
@@ -7947,23 +8046,54 @@
         return { ok: true, message: 'Solicitud enviada. Tu acceso queda pendiente de aprobacion.' };
       }
 
-      function createAdminUser(formData) {
+      async function createAdminUser(formData) {
+        if (supabaseEnabled) {
+          const session = getRemoteSession();
+          if (!session?.token) return { ok: false, message: 'Sesion administrativa no encontrada.' };
+          const result = await rpc('dxn_saas_create_admin_user', {
+            p_session_token: session.token,
+            p_payload: {
+              name: (formData.get('name') || '').trim(),
+              email: (formData.get('email') || '').trim().toLowerCase(),
+              dxnCode: normalizeKey(formData.get('dxnCode')),
+              organizationName: (formData.get('organizationName') || '').trim(),
+              sponsorName: (formData.get('sponsorName') || '').trim(),
+              accessKey: '',
+              role: 'standard',
+              status: 'active'
+            }
+          });
+          if (result.ok) remoteStateCache = await remoteSnapshot();
+          await applyAccessState();
+          return result;
+        }
         const state = loadState();
         const session = getSession();
-        const organizationId = formData.get('organizationId');
-        const org = orgById(state, organizationId);
+        const organizationName = (formData.get('organizationName') || '').trim();
+        const sponsorName = (formData.get('sponsorName') || '').trim();
         const email = (formData.get('email') || '').trim().toLowerCase();
         const dxnCode = normalizeKey(formData.get('dxnCode'));
-        const accessKey = normalizeKey(formData.get('accessKey')) || `DXN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-        const role = formData.get('role') || 'standard';
-        const status = formData.get('status') || 'active';
+        const accessKey = dxnCode;
+        const role = 'standard';
+        const status = 'active';
         if (session?.type !== 'super_admin') return { ok: false, message: 'Solo el Super Administrador puede crear usuarios.' };
-        if (!org) return { ok: false, message: 'Selecciona una organizacion valida.' };
+        if (!organizationName) return { ok: false, message: 'Ingresa el equipo u organizacion.' };
+        if (!sponsorName) return { ok: false, message: 'Ingresa el nombre del patrocinador.' };
         if (state.users.some(user => user.email.toLowerCase() === email)) return { ok: false, message: 'El correo ya esta registrado.' };
         if (state.users.some(user => normalizeKey(user.dxnCode) === dxnCode)) return { ok: false, message: 'El codigo DXN ya esta registrado.' };
         if (state.users.some(user => normalizeKey(user.accessKey) === accessKey)) return { ok: false, message: 'La clave de acceso ya esta registrada.' };
-        if (!['standard', 'premium', 'org_admin'].includes(role)) return { ok: false, message: 'Selecciona un rol valido.' };
-        if (!['pending', 'active', 'suspended'].includes(status)) return { ok: false, message: 'Selecciona un estado valido.' };
+        let org = state.organizations.find(item => item.name.trim().toLowerCase() === organizationName.toLowerCase());
+        if (!org) {
+          org = {
+            id: uid('org'),
+            name: organizationName,
+            status: 'active',
+            plan: 'standard',
+            createdAt: todayIso(),
+            settings: { ...defaultSettings, commercialName: organizationName, sponsorName }
+          };
+          state.organizations.push(org);
+        }
 
         const userId = uid('usr');
         const permissions = role === 'standard'
@@ -7971,10 +8101,11 @@
           : ['orders', 'contracts', 'premium_dashboard'];
         state.users.push({
           id: userId,
-          organizationId,
+          organizationId: org.id,
           name: (formData.get('name') || '').trim(),
           email,
           dxnCode,
+          sponsorName,
           accessKey,
           passwordHash: '',
           role,
@@ -7985,11 +8116,12 @@
         if (status === 'active' && org.status === 'pending') org.status = 'active';
         audit(state, session, `Usuario creado manualmente: ${email}`);
         saveState(state);
-        applyAccessState();
+        await applyAccessState();
         return { ok: true, message: `Usuario agregado. Clave de acceso: ${accessKey}` };
       }
 
-      function currentContext() {
+      async function currentContext() {
+        if (supabaseEnabled) return remoteContext();
         const state = loadState();
         const session = getSession();
         const user = session?.userId ? userById(state, session.userId) : null;
@@ -8011,7 +8143,7 @@
           clearSession();
           return { state, session: null, user: null, org: null, deniedMessage: 'El acceso administrativo es exclusivo para el Super Admin.' };
         }
-        if (!user || !org || user.status !== 'active' || org.status !== 'active') {
+        if (!user || user.status !== 'active') {
           const deniedMessage = denyMessage(user, org);
           audit(state, session, `Sesion cerrada automaticamente: ${deniedMessage}`);
           saveState(state);
@@ -8021,14 +8153,16 @@
         return context;
       }
 
-      function settingsForContext() {
-        const { session, org } = validateSessionContext(currentContext());
+      async function settingsForContext() {
+        const context = await currentContext();
+        const { session, org } = supabaseEnabled ? context : validateSessionContext(context);
         if (session?.type === 'super_admin') return defaultSettings;
         return { ...defaultSettings, ...(org?.settings || {}) };
       }
 
-      function applyBranding() {
-        const settings = settingsForContext();
+      async function applyBranding() {
+        const settings = await settingsForContext();
+        activeSettingsCache = settings;
         document.documentElement.style.setProperty('--accent', settings.primaryColor || defaultSettings.primaryColor);
         document.querySelectorAll('.mark, .home-logo, .saas-auth-logo').forEach(img => {
           if (settings.logo && img.dataset.fallbackApplied !== 'true' && img.dataset.logoInlineApplied !== 'true' && !img.dataset.logoFallbackTried) img.src = settings.logo;
@@ -8069,7 +8203,7 @@
         if (loginTitle) loginTitle.textContent = adminMode ? 'Acceso Super Admin' : 'Clave de Acceso';
         if (authIntro) authIntro.textContent = adminMode
           ? 'Area administrativa independiente conectada a la plataforma SaaS.'
-          : 'Acceso privado multi-tenant para organizaciones y usuarios aprobados.';
+          : 'Herramienta privada y exclusiva para potenciar el desarrollo y crecimiento del equipo y toda su red.';
         if (notice) {
           notice.innerHTML = adminMode
             ? '<strong>Acceso administrativo</strong><br>Ruta exclusiva del Super Admin. Los usuarios ingresan por el acceso principal.'
@@ -8084,8 +8218,9 @@
         }
       }
 
-      function applyAccessState() {
-        const { session, user, org, deniedMessage } = validateSessionContext(currentContext());
+      async function applyAccessState() {
+        const context = await currentContext();
+        const { session, user, org, deniedMessage } = supabaseEnabled ? context : validateSessionContext(context);
         applyAuthMode();
         const locked = !session;
         document.body.classList.toggle('saas-locked', locked);
@@ -8101,9 +8236,9 @@
           loginMessage.textContent = deniedMessage;
           loginMessage.classList.remove('success');
         }
-        applyBranding();
-        renderAdmin();
-        renderPremiumForm();
+        await applyBranding();
+        await renderAdmin();
+        await renderPremiumForm();
         if (session?.type === 'super_admin' && document.body.dataset.activeDoc === 'homeDoc') {
           goToDocument('superAdminDoc');
         }
@@ -8117,24 +8252,16 @@
         return `<tr><td colspan="6">${text}</td></tr>`;
       }
 
-      function renderAdmin() {
+      async function renderAdmin() {
         const stats = document.getElementById('saasGlobalStats');
         if (!stats) return;
-        const { state, session } = currentContext();
+        const { state, session } = await currentContext();
         if (session?.type !== 'super_admin') {
           stats.innerHTML = '';
           return;
         }
         const orgs = state.organizations;
         const users = state.users;
-        const adminUserOrgSelect = document.getElementById('saasAdminUserOrganization');
-        if (adminUserOrgSelect) {
-          const currentValue = adminUserOrgSelect.value;
-          adminUserOrgSelect.innerHTML = orgs
-            .map(org => `<option value="${org.id}">${org.name} - ${stateLabel(org.status)} - ${planLabel(org.plan)}</option>`)
-            .join('');
-          if (orgs.some(org => org.id === currentValue)) adminUserOrgSelect.value = currentValue;
-        }
         const statItems = [
           ['Organizaciones', orgs.length],
           ['Activas', orgs.filter(org => org.status === 'active').length],
@@ -8175,7 +8302,7 @@
               <td class="saas-row-actions">
                 <button type="button" data-saas-action="user-active" data-user-id="${user.id}">Activar</button>
                 <button type="button" class="secondary" data-saas-action="user-suspend" data-user-id="${user.id}">Suspender</button>
-                <button type="button" class="secondary" data-saas-action="role" data-user-id="${user.id}">Rol</button>
+                <button type="button" class="secondary" data-saas-action="role" data-user-id="${user.id}" data-current-role="${user.role}">Rol</button>
                 <button type="button" class="secondary" data-saas-action="key" data-user-id="${user.id}">Regenerar clave</button>
                 <button type="button" class="danger" data-saas-action="user-delete" data-user-id="${user.id}">Eliminar</button>
               </td>
@@ -8192,20 +8319,41 @@
           </tr>`).join('') : '<tr><td colspan="5">Sin actividad registrada.</td></tr>';
       }
 
-      function mutate(action) {
+      async function mutate(action) {
+        if (supabaseEnabled) return;
         const state = loadState();
         const session = getSession();
         action(state);
         audit(state, session, 'Cambio administrativo');
         saveState(state);
-        applyAccessState();
+        await applyAccessState();
       }
 
-      function handleAdminAction(event) {
+      async function handleAdminAction(event) {
         const button = event.target.closest('[data-saas-action]');
         if (!button) return;
         const action = button.dataset.saasAction;
-        mutate(state => {
+        if (supabaseEnabled) {
+          const session = getRemoteSession();
+          if (!session?.token) return;
+          let value = null;
+          if (action === 'role') {
+            value = prompt('Rol: standard, premium u org_admin', button.dataset.currentRole || 'standard');
+            if (!['standard', 'premium', 'org_admin'].includes(value)) return;
+          }
+          if (action === 'user-delete' && !confirm('Eliminar usuario?')) return;
+          await rpc('dxn_saas_admin_action', {
+            p_session_token: session.token,
+            p_action: action,
+            p_user_id: button.dataset.userId || null,
+            p_org_id: button.dataset.orgId || null,
+            p_value: value
+          });
+          remoteStateCache = await remoteSnapshot();
+          await applyAccessState();
+          return;
+        }
+        await mutate(state => {
           const user = button.dataset.userId ? userById(state, button.dataset.userId) : null;
           const org = button.dataset.orgId ? orgById(state, button.dataset.orgId) : user ? orgById(state, user.organizationId) : null;
           if (action === 'approve' && user && org) { user.status = 'active'; org.status = 'active'; }
@@ -8224,10 +8372,10 @@
         });
       }
 
-      function renderPremiumForm() {
+      async function renderPremiumForm() {
         const form = document.getElementById('saasPremiumForm');
         if (!form) return;
-        const { session, org } = currentContext();
+        const { session, org } = await currentContext();
         if (!session || session.type === 'super_admin' || !org) return;
         const settings = { ...defaultSettings, ...(org.settings || {}) };
         Object.entries(settings).forEach(([key, value]) => {
@@ -8235,21 +8383,35 @@
         });
       }
 
-      function savePremium(formData) {
-        const { session } = currentContext();
+      async function savePremium(formData) {
+        const context = await currentContext();
+        const { session } = context;
         if (!session?.organizationId) return;
-        mutate(state => {
+        const payload = {};
+        ['commercialName', 'primaryColor', 'logo', 'whatsapp', 'whatsappMessage', 'sponsorName', 'sponsorCode', 'sponsorPhone', 'sponsorEmail'].forEach(key => {
+          payload[key] = formData.get(key) || '';
+        });
+        if (supabaseEnabled) {
+          const remoteSession = getRemoteSession();
+          if (!remoteSession?.token) return;
+          await rpc('dxn_saas_save_settings', {
+            p_session_token: remoteSession.token,
+            p_payload: payload
+          });
+          remoteStateCache = await remoteSnapshot();
+          await applyAccessState();
+          return;
+        }
+        await mutate(state => {
           const org = orgById(state, session.organizationId);
           if (!org) return;
           org.settings = { ...org.settings };
-          ['commercialName', 'primaryColor', 'logo', 'whatsapp', 'whatsappMessage', 'sponsorName', 'sponsorCode', 'sponsorPhone', 'sponsorEmail'].forEach(key => {
-            org.settings[key] = formData.get(key) || '';
-          });
+          Object.assign(org.settings, payload);
         });
       }
 
       function getSponsorSettings() {
-        const settings = settingsForContext();
+        const settings = activeSettingsCache || defaultSettings;
         return {
           code: settings.sponsorCode || defaultSettings.sponsorCode,
           name: settings.sponsorName || defaultSettings.sponsorName
@@ -8271,64 +8433,60 @@
         }
         loginTab?.addEventListener('click', () => setAuthView('login'));
         registerTab?.addEventListener('click', () => setAuthView('register'));
-        document.getElementById('saasLoginForm')?.addEventListener('submit', event => {
+        document.getElementById('saasLoginForm')?.addEventListener('submit', async event => {
           event.preventDefault();
           const message = document.getElementById('saasLoginMessage');
-          const result = login(new FormData(event.currentTarget).get('accessKey'));
+          const result = await login(new FormData(event.currentTarget).get('accessKey'));
           if (!result.ok) {
             message.textContent = result.message;
             message.classList.remove('success');
             return;
           }
           message.textContent = '';
-          applyAccessState();
+          await applyAccessState();
         });
-        document.getElementById('saasRegisterForm')?.addEventListener('submit', event => {
+        document.getElementById('saasRegisterForm')?.addEventListener('submit', async event => {
           event.preventDefault();
           const message = document.getElementById('saasRegisterMessage');
-          const result = register(new FormData(event.currentTarget));
+          const result = await register(new FormData(event.currentTarget));
           message.textContent = result.message;
           message.classList.toggle('success', result.ok);
           if (result.ok) event.currentTarget.reset();
         });
-        document.getElementById('saasLogout')?.addEventListener('click', () => {
+        document.getElementById('saasLogout')?.addEventListener('click', async () => {
           clearSession();
+          clearRemoteSession();
           document.body.dataset.activeDoc = 'homeDoc';
-          applyAccessState();
-        });
-        document.getElementById('saasResetDemo')?.addEventListener('click', () => {
-          if (!confirm('Restaurar datos demo SaaS?')) return;
-          saveState(seedState());
-          applyAccessState();
+          await applyAccessState();
         });
         document.getElementById('superAdminDoc')?.addEventListener('click', handleAdminAction);
-        document.getElementById('saasAdminUserForm')?.addEventListener('submit', event => {
+        document.getElementById('saasAdminUserForm')?.addEventListener('submit', async event => {
           event.preventDefault();
           const message = document.getElementById('saasAdminUserMessage');
-          const result = createAdminUser(new FormData(event.currentTarget));
+          const result = await createAdminUser(new FormData(event.currentTarget));
           message.textContent = result.message;
           message.classList.toggle('success', result.ok);
           if (result.ok) event.currentTarget.reset();
-          renderAdmin();
+          await renderAdmin();
         });
-        document.getElementById('saasPremiumForm')?.addEventListener('submit', event => {
+        document.getElementById('saasPremiumForm')?.addEventListener('submit', async event => {
           event.preventDefault();
-          savePremium(new FormData(event.currentTarget));
+          await savePremium(new FormData(event.currentTarget));
           const message = document.getElementById('saasPremiumMessage');
           message.textContent = 'Configuracion guardada.';
           message.classList.add('success');
         });
         window.addEventListener('storage', event => {
-          if (event.key === STORAGE_KEY || event.key === SESSION_KEY) applyAccessState();
+          if (event.key === STORAGE_KEY || event.key === SESSION_KEY || event.key === REMOTE_SESSION_KEY) applyAccessState();
         });
         window.addEventListener('hashchange', applyAccessState);
       }
 
-      function init() {
-        loadState();
+      async function init() {
+        if (!supabaseEnabled) loadState();
         setupLogoFallbacks();
         bind();
-        applyAccessState();
+        await applyAccessState();
         window.setInterval(applyAccessState, 5000);
       }
 
